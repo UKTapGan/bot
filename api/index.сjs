@@ -3,15 +3,12 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  ssl: { rejectUnauthorized: false },
   client_encoding: 'UTF8',
 });
 
@@ -19,7 +16,10 @@ const db = {
   query: (text, params) => pool.query(text, params),
 };
 
-app.get('/api/users', async (req, res) => {
+// --- API-ендпоінти зі спрощеними шляхами ---
+
+// Раніше було: /api/users, тепер: /users
+app.get('/users', async (req, res) => {
   try {
     const { rows } = await db.query('SELECT * FROM users ORDER BY name');
     res.json(rows);
@@ -29,36 +29,35 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
-    const { id, name } = req.body;
-    if (!id) {
-        return res.status(400).json({ message: "ID користувача є обов'язковим" });
+// Раніше було: /api/login, тепер: /login
+app.post('/login', async (req, res) => {
+  const { id, name } = req.body;
+  if (!id) {
+    return res.status(400).json({ message: "ID користувача є обов'язковим" });
+  }
+  try {
+    const userResult = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+    if (userResult.rows.length > 0) {
+      let user = userResult.rows[0];
+      if (name && user.name !== name) {
+        const updateResult = await db.query('UPDATE users SET name = $1 WHERE id = $2 RETURNING *', [name, id]);
+        user = updateResult.rows[0];
+      }
+      res.json(user);
+    } else {
+      res.status(403).json({ message: 'Доступ заборонено. Користувача не знайдено' });
     }
-    try {
-        let userResult = await db.query('SELECT * FROM users WHERE id = $1', [id]);
-        if (userResult.rows.length > 0) {
-            let user = userResult.rows[0];
-            if (name && user.name !== name) {
-                const updateResult = await db.query('UPDATE users SET name = $1 WHERE id = $2 RETURNING *', [name, id]);
-                user = updateResult.rows[0];
-            }
-            res.json(user);
-        } else {
-            res.status(403).json({ message: 'Доступ заборонено. Користувача не знайдено' });
-        }
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Помилка сервера');
-    }
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Помилка сервера');
+  }
 });
 
-app.post('/api/users', async (req, res) => {
+// Раніше було: /api/users, тепер: /users
+app.post('/users', async (req, res) => {
   const { id, role, name } = req.body;
   try {
-    const { rows } = await db.query(
-      'INSERT INTO users (id, role, name) VALUES ($1, $2, $3) RETURNING *',
-      [id, role, name || '']
-    );
+    const { rows } = await db.query('INSERT INTO users (id, role, name) VALUES ($1, $2, $3) RETURNING *', [id, role, name || '']);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err.message);
@@ -66,7 +65,8 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-app.delete('/api/users/:id', async (req, res) => {
+// Раніше було: /api/users/:id, тепер: /users/:id
+app.delete('/users/:id', async (req, res) => {
   const { id } = req.params;
   try {
     await db.query('DELETE FROM users WHERE id = $1', [id]);
@@ -77,4 +77,5 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
+// Експортуємо додаток
 module.exports = app;
