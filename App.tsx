@@ -55,8 +55,9 @@ const App: React.FC = () => {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // <-- ЗМІНЕНО: Цей хук тепер асинхронний для роботи з базою даних
     useEffect(() => {
-        const attemptTelegramLogin = () => {
+        const attemptLogin = async () => {
             const tg = window.Telegram?.WebApp;
             
             if (tg && tg.initData) {
@@ -65,11 +66,13 @@ const App: React.FC = () => {
 
                 if (tgUser && tgUser.id) {
                     const userName = `${tgUser.first_name} ${tgUser.last_name || ''}`.trim();
-                    const loggedInUser = userService.login(tgUser.id.toString(), userName);
+                    // Робимо асинхронний запит до нашого сервера
+                    const loggedInUser = await userService.login(tgUser.id.toString(), userName);
 
                     if (loggedInUser) {
                         setCurrentUser(loggedInUser);
-                        setUsers(userService.getUsers());
+                        const allUsers = await userService.getUsers();
+                        setUsers(allUsers);
                         setAuthStatus('loggedIn');
                     } else {
                         setAuthStatus('accessDenied');
@@ -78,26 +81,29 @@ const App: React.FC = () => {
                 }
             }
 
-            // Fallback for non-Telegram environment or missing user data
+            // Fallback: перевіряємо, чи є збережений користувач у сесії
             const existingSessionUser = userService.getLoggedInUser();
             if (existingSessionUser) {
                 setCurrentUser(existingSessionUser);
-                setUsers(userService.getUsers());
+                // Завантажуємо актуальний список користувачів з сервера
+                const allUsers = await userService.getUsers();
+                setUsers(allUsers);
                 setAuthStatus('loggedIn');
             } else {
                 setAuthStatus('loginScreen');
             }
         };
 
-        attemptTelegramLogin();
+        attemptLogin();
     }, []);
 
-
+    // <-- ЗМІНЕНО: Ця функція тепер повністю асинхронна
     const handleLogin = useCallback(async (id: string): Promise<boolean> => {
-        const user = userService.login(id);
+        const user = await userService.login(id);
         if (user) {
             setCurrentUser(user);
-            setUsers(userService.getUsers());
+            const allUsers = await userService.getUsers(); // Отримуємо всіх користувачів з БД
+            setUsers(allUsers);
             setAuthStatus('loggedIn');
             return true;
         }
@@ -112,19 +118,22 @@ const App: React.FC = () => {
         setAuthStatus('loginScreen');
     }, []);
 
-    const handleAddUser = (id: string, role: UserRole) => {
+    // <-- ЗМІНЕНО: Функція стала асинхронною
+    const handleAddUser = async (id: string, role: UserRole) => {
         try {
-            userService.addUser(id, role);
-            setUsers(userService.getUsers());
+            await userService.addUser(id, role);
+            const updatedUsers = await userService.getUsers();
+            setUsers(updatedUsers);
         } catch (e) {
             alert(e instanceof Error ? e.message : String(e));
         }
     };
 
-    const handleRemoveUser = (id: string) => {
+    // <-- ЗМІНЕНО: Функція стала асинхронною
+    const handleRemoveUser = async (id: string) => {
         try {
-            userService.removeUser(id);
-            setUsers(userService.getUsers());
+            await userService.removeUser(id);
+            setUsers(prevUsers => prevUsers.filter(user => user.id !== id));
         } catch (e) {
             alert(e instanceof Error ? e.message : String(e));
         }
