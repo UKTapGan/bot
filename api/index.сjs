@@ -2,78 +2,130 @@ const { Pool } = require('pg');
 const express = require('express');
 const cors = require('cors');
 
+// Лог, що сигналізує про початок виконання файлу
+console.log('[INFO] Запуск серверної функції api/index.cjs');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Більш надійна конфігурація для Neon/Vercel
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+let pool;
 
+// Перевірка наявності змінної середовища
+if (!process.env.DATABASE_URL) {
+  console.error('[CRITICAL] Змінна середовища DATABASE_URL не встановлена!');
+} else {
+  console.log('[INFO] Змінна DATABASE_URL знайдена.');
+}
+
+try {
+  // Ініціалізація пулу з'єднань з базою даних
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+  console.log('[INFO] Пул з\'єднань з БД успішно створено.');
+} catch (err) {
+  console.error('[CRITICAL] Не вдалося створити пул з\'єднань!', err);
+}
+
+// Об'єкт для роботи з базою даних
 const db = {
-  query: (text, params) => pool.query(text, params),
+  query: (text, params) => {
+    if (!pool) {
+      console.error('[ERROR] Спроба виконати запит до БД, але пул не ініціалізовано.');
+      throw new Error('Database pool is not available.');
+    }
+    return pool.query(text, params);
+  },
 };
 
-// --- API-ендпоінти з виправленими шляхами ---
+// --- ОСНОВНІ API-ЕНДПОІНТИ ---
 
-app.get('/api/users', async (req, res) => {
-  try {
-    const { rows } = await db.query('SELECT * FROM users ORDER BY name');
-    res.json(rows);
-  } catch (err) {
-    console.error('Server error on GET /api/users:', err.message);
-    res.status(500).send('Помилка сервера');
-  }
-});
-
+// Ендпоінт для входу користувача
 app.post('/api/login', async (req, res) => {
+  console.log('[REQUEST] Отримано запит на POST /api/login');
   const { id, name } = req.body;
+  
   if (!id) {
+    console.warn('[WARN] Запит на логін не містить ID.');
     return res.status(400).json({ message: "ID користувача є обов'язковим" });
   }
+
+  console.log(`[DB] Пошук користувача з ID: ${id}`);
+
   try {
     const userResult = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+    
     if (userResult.rows.length > 0) {
       let user = userResult.rows[0];
+      console.log(`[SUCCESS] Користувача з ID ${id} знайдено.`);
+      
+      // Оновлюємо ім'я, якщо воно змінилося
       if (name && user.name !== name) {
+        console.log(`[DB] Оновлення імені для ID ${id} з '${user.name}' на '${name}'`);
         const updateResult = await db.query('UPDATE users SET name = $1 WHERE id = $2 RETURNING *', [name, id]);
         user = updateResult.rows[0];
       }
-      res.json(user);
+      return res.status(200).json(user);
     } else {
-      res.status(403).json({ message: 'Доступ заборонено. Користувача не знайдено' });
+      console.warn(`[WARN] Користувача з ID ${id} не знайдено в базі даних.`);
+      return res.status(403).json({ message: 'Доступ заборонено. Користувача не знайдено' });
     }
   } catch (err) {
-    console.error('Server error on POST /api/login:', err.message);
-    res.status(500).send('Помилка сервера');
+    console.error(`[ERROR] Помилка запиту до БД в /api/login для ID ${id}:`, err);
+    return res.status(500).json({ message: 'Внутрішня помилка сервера при спробі входу.' });
   }
 });
 
+// Ендпоінт для отримання всіх користувачів
+app.get('/api/users', async (req, res) => {
+  console.log('[REQUEST] Отримано запит на GET /api/users');
+  try {
+    const { rows } = await db.query('SELECT * FROM users ORDER BY name');
+    console.log(`[SUCCESS] Отримано ${rows.length} користувачів.`);
+    res.json(rows);
+  } catch (err) {
+    console.error('[ERROR] Помилка запиту до БД в /api/users:', err);
+    res.status(500).json({ message: 'Внутрішня помилка сервера при отриманні користувачів.' });
+  }
+});
+
+// Ендпоінт для створення нового користувача
 app.post('/api/users', async (req, res) => {
-  const { id, role, name } = req.body;
-  try {
-    const { rows } = await db.query('INSERT INTO users (id, role, name) VALUES ($1, $2, $3) RETURNING *', [id, role, name || '']);
-    res.status(201).json(rows[0]);
-  } catch (err) {
-    console.error('Server error on POST /api/users:', err.message);
-    res.status(500).send('Помилка сервера: Можливо, користувач з таким ID вже існує.');
-  }
+    console.log('[REQUEST] Отримано запит на POST /api/users');
+    const { id, role, name } = req.body;
+    try {
+        const { rows } = await db.query('INSERT INTO users (id, role, name) VALUES ($1, $2, $3) RETURNING *', [id, role, name || '']);
+        console.log(`[SUCCESS] Створено нового користувача з ID: ${id}`);
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error(`[ERROR] Помилка при створенні користувача з ID ${id}:`, err);
+        res.status(500).json({ message: 'Помилка сервера: Можливо, користувач з таким ID вже існує.' });
+    }
 });
 
+// Ендпоінт для видалення користувача
 app.delete('/api/users/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await db.query('DELETE FROM users WHERE id = $1', [id]);
-    res.status(204).send();
-  } catch (err) {
-    console.error('Server error on DELETE /api/users/:id:', err.message);
-    res.status(500).send('Помилка сервера');
-  }
+    const { id } = req.params;
+    console.log(`[REQUEST] Отримано запит на DELETE /api/users/${id}`);
+    try {
+        await db.query('DELETE FROM users WHERE id = $1', [id]);
+        console.log(`[SUCCESS] Видалено користувача з ID: ${id}`);
+        res.status(204).send();
+    } catch (err) {
+        console.error(`[ERROR] Помилка при видаленні користувача з ID ${id}:`, err);
+        res.status(500).json({ message: 'Внутрішня помилка сервера при видаленні користувача.' });
+    }
 });
 
-// Експортуємо додаток для Vercel
+// Обробник для всіх інших запитів, щоб ловити помилки 404
+app.use((req, res, next) => {
+    console.error(`[ERROR 404] Маршрут не знайдено: ${req.method} ${req.originalUrl}`);
+    res.status(404).send('Not Found');
+});
+
+// Експорт додатку для Vercel
 module.exports = app;
