@@ -6,30 +6,31 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Більш надійна конфігурація для Neon/Vercel
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: true // Просто вказуємо, що SSL потрібен
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 const db = {
   query: (text, params) => pool.query(text, params),
 };
 
-// --- API-ендпоінти зі спрощеними шляхами ---
+// --- API-ендпоінти з виправленими шляхами ---
 
-// Раніше було: /api/users, тепер: /users
-app.get('/users', async (req, res) => {
+app.get('/api/users', async (req, res) => {
   try {
     const { rows } = await db.query('SELECT * FROM users ORDER BY name');
     res.json(rows);
   } catch (err) {
-    console.error(err.message);
+    console.error('Server error on GET /api/users:', err.message);
     res.status(500).send('Помилка сервера');
   }
 });
 
-// Раніше було: /api/login, тепер: /login
-app.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { id, name } = req.body;
   if (!id) {
     return res.status(400).json({ message: "ID користувача є обов'язковим" });
@@ -47,34 +48,32 @@ app.post('/login', async (req, res) => {
       res.status(403).json({ message: 'Доступ заборонено. Користувача не знайдено' });
     }
   } catch (err) {
-    console.error(err.message);
+    console.error('Server error on POST /api/login:', err.message);
     res.status(500).send('Помилка сервера');
   }
 });
 
-// Раніше було: /api/users, тепер: /users
-app.post('/users', async (req, res) => {
+app.post('/api/users', async (req, res) => {
   const { id, role, name } = req.body;
   try {
     const { rows } = await db.query('INSERT INTO users (id, role, name) VALUES ($1, $2, $3) RETURNING *', [id, role, name || '']);
     res.status(201).json(rows[0]);
   } catch (err) {
-    console.error(err.message);
+    console.error('Server error on POST /api/users:', err.message);
     res.status(500).send('Помилка сервера: Можливо, користувач з таким ID вже існує.');
   }
 });
 
-// Раніше було: /api/users/:id, тепер: /users/:id
-app.delete('/users/:id', async (req, res) => {
+app.delete('/api/users/:id', async (req, res) => {
   const { id } = req.params;
   try {
     await db.query('DELETE FROM users WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    console.error(err.message);
+    console.error('Server error on DELETE /api/users/:id:', err.message);
     res.status(500).send('Помилка сервера');
   }
 });
 
-// Експортуємо додаток
+// Експортуємо додаток для Vercel
 module.exports = app;
