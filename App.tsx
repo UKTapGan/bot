@@ -55,47 +55,38 @@ const App: React.FC = () => {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // <-- ЗМІНЕНО: Цей хук тепер асинхронний для роботи з базою даних
-    useEffect(() => {
-        const attemptLogin = async () => {
-            const tg = window.Telegram?.WebApp;
-            
-            if (tg && tg.initData) {
-                tg.ready();
-                const tgUser = tg.initDataUnsafe.user;
+    // <-- ЗМІНЕНО: Цей хук тепер асинхронний для роботи з базою даних// ЗАМІНІТЬ ВАШ ПОТОЧНИЙ useEffect НА ЦЕЙ КОД
 
-                if (tgUser && tgUser.id) {
-                    const userName = `${tgUser.first_name} ${tgUser.last_name || ''}`.trim();
-                    // Робимо асинхронний запит до нашого сервера
-                    const loggedInUser = await userService.login(tgUser.id.toString(), userName);
+useEffect(() => {
+    const attemptLogin = async () => {
+        // --- ВАШІ ДАНІ для тестування ---
+        const YOUR_TELEGRAM_ID = '7350287247';
+        const YOUR_NAME = 'Tapgan'; // Це ім'я буде використовуватись при логіні
+        // --------------------------------
 
-                    if (loggedInUser) {
-                        setCurrentUser(loggedInUser);
-                        const allUsers = await userService.getUsers();
-                        setUsers(allUsers);
-                        setAuthStatus('loggedIn');
-                    } else {
-                        setAuthStatus('accessDenied');
-                    }
-                    return; 
-                }
-            }
+        console.log(`Attempting to login with hardcoded ID: ${YOUR_TELEGRAM_ID}`);
 
-            // Fallback: перевіряємо, чи є збережений користувач у сесії
-            const existingSessionUser = userService.getLoggedInUser();
-            if (existingSessionUser) {
-                setCurrentUser(existingSessionUser);
-                // Завантажуємо актуальний список користувачів з сервера
-                const allUsers = await userService.getUsers();
-                setUsers(allUsers);
-                setAuthStatus('loggedIn');
-            } else {
-                setAuthStatus('loginScreen');
-            }
-        };
+        // Намагаємося увійти з вашим ID
+        const loggedInUser = await userService.login(YOUR_TELEGRAM_ID, YOUR_NAME);
 
-        attemptLogin();
-    }, []);
+        if (loggedInUser) {
+            // Якщо успішно, логінимо користувача
+            setCurrentUser(loggedInUser);
+            const allUsers = await userService.getUsers();
+            setUsers(allUsers);
+            setAuthStatus('loggedIn');
+            console.log('Login successful with hardcoded ID!');
+        } else {
+            // Якщо логін не вдався навіть з правильним ID,
+            // значить проблема точно на бекенді або з БД.
+            // Показуємо екран ручного входу, щоб не блокувати додаток.
+            console.error('Login with hardcoded ID failed. Check backend logs and database connection.');
+            setAuthStatus('loginScreen');
+        }
+    };
+
+    attemptLogin();
+}, []); // Порожній масив означає, що це виконається один раз при завантаженні
 
     // <-- ЗМІНЕНО: Ця функція тепер повністю асинхронна
     const handleLogin = useCallback(async (id: string): Promise<boolean> => {
