@@ -1,0 +1,63 @@
+const express = require('express');
+const crypto = require('crypto');
+const { exec } = require('child_process');
+
+const app = express();
+const PORT = 9000;
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+const DEPLOY_SCRIPT_PATH = './deploy.sh';
+
+if (!WEBHOOK_SECRET) {
+    console.error('FATAL: WEBHOOK_SECRET environment variable is not set!');
+    process.exit(1);
+}
+
+//Middleware для перевірки підпису
+const verifyGitHubSignature = (req, res, next) => {
+    const signature = req.headers['x-hub-signature-256'];
+    if (!signature) {
+        console.warn('Signature check failed: No signature header found.');
+        return res.status(401).send('Invalid signature');
+    }
+
+    const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET);
+    // Важливо: використовуємо сире тіло запиту (req.rawBody)
+    const digest = `sha256=${hmac.update(req.rawBody).digest('hex')}`;
+
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
+        console.warn('Signature check failed: Signature mismatch.');
+        return res.status(401).send('Invalid signature');
+    }
+
+    return next();
+};
+
+// Спочатку ми отримуємо сире тіло запиту
+app.use(express.raw({
+    type: 'application/json',
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
+
+// Потім парсимо JSON, але тільки після того, як зберегли сире тіло
+app.use(express.json());
+
+// Застосовуємо наш middleware для перевірки підпису до маршруту
+app.post('/webhook', verifyGitHubSignature, (req, res) => {
+    if (req.body.ref === 'refs/heads/main') {
+        console.log('Webhook validated. Push to main received. Starting deployment...');
+        exec(`sh ${DEPLOY_SCRIPT_PATH}`, (error, stdout, stderr) => {
+            if (error) console.error(`Exec error: ${error.message}`);
+            if (stderr) console.error(`Exec stderr: ${stderr}`);
+            if (stdout) console.log(`Exec stdout: ${stdout}`);
+        });
+        res.status(200).send('Deployment initiated.');
+    } else {
+        res.status(200).send('Not a push to main branch, skipping.');
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Webhook listener started on port ${PORT}`);
+});
