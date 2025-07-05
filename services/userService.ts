@@ -2,7 +2,7 @@ import type { User } from '../types';
 import { UserRole } from '../types';
 
 // Ми будемо використовувати відносний шлях, оскільки налаштуємо проксі у Vite
-const API_URL = '/api'; 
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Зберігаємо поточного користувача в sessionStorage для швидкого доступу протягом сесії
 const CURRENT_USER_SESSION_KEY = 'uvape_assistant_currentUser';

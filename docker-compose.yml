@@ -1,0 +1,53 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Сервіс бази даних PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: uvape_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password # Встановіть надійний пароль
+      POSTGRES_DB: uvape_assistant_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Скрипт для створення таблиці
+    ports:
+      - "5432:5432" # Прокидаємо порт для зручності
+    restart: unless-stopped
+
+  # Сервіс бекенду (API)
+  server:
+    container_name: uvape_api_server
+    build:
+      context: .
+      dockerfile: Dockerfile.server # Ми створимо цей файл нижче
+    environment:
+      # Рядок підключення до БД, яка знаходиться в іншому контейнері
+      DATABASE_URL: postgresql://user:password@db:5432/uvape_assistant_db
+      PORT: 3001 # Порт, на якому буде працювати Express
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db # Запускати тільки після старту БД
+    restart: unless-stopped
+
+  # Сервіс фронтенду (React + Nginx)
+  client:
+    container_name: uvape_client
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      args:
+        # Передаємо URL нашого API в контейнер фронтенду
+        REACT_APP_API_URL: http://localhost:3001/api
+    ports:
+      - "80:80"
+    depends_on:
+      - server # Запускати після старту API
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

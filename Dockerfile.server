@@ -1,0 +1,14 @@
+# Dockerfile.server
+FROM node:18-alpine
+WORKDIR /app
+
+# Встановлюємо залежності
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Копіюємо тільки необхідні файли для API
+COPY api ./api
+
+# Запускаємо сервер
+# Ми використовуємо `node api/index.cjs` напряму
+CMD [ "node", "api/index.cjs" ]
