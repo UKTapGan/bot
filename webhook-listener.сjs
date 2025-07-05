@@ -31,7 +31,7 @@ const verifyGitHubSignature = (req, res, next) => {
 
     return next();
 };
-
+/////////////////////////////////
 // Спочатку ми отримуємо сире тіло запиту
 app.use(express.raw({
     type: 'application/json',
