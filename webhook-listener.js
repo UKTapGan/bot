@@ -17,7 +17,7 @@ if (!WEBHOOK_SECRET) {
 
 // Middleware для парсингу JSON-тіла запиту
 app.use(express.json());
-
+//////////////////////////////////////
 app.post('/webhook', (req, res) => {
     // 1. Перевірка підпису від GitHub для безпеки
     const signature = req.headers['x-hub-signature-256'];
