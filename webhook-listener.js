@@ -1,7 +1,7 @@
 // webhook-listener.js
-const express = require('express');
-const crypto = require('crypto');
-const { exec } = require('child_process');
+import express from 'express';
+import crypto from 'crypto';
+import { exec } from 'child_process';
 
 const app = express();
 const PORT = 9000; // Порт для прослуховування вебхуків
